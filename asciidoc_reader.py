@@ -1,25 +1,16 @@
-# -*- coding: utf-8 -*-
-"""
-AsciiDoc Reader
-===============
-
-This plugin allows you to use AsciiDoc to write your posts.
-File extension should be ``.asc``, ``.adoc``, or ``asciidoc``.
-"""
-
-from pelican.readers import BaseReader
-from pelican import signals
+import logging
 import os
 import re
 import subprocess
 import tempfile
 
-import logging
+from pelican import signals
+from pelican.readers import BaseReader
 
 logger = logging.getLogger(__name__)
 
 
-def encoding():
+def encoding() -> str:
     """Return encoding used to decode shell output in call function"""
     if os.name == "nt":
         from ctypes import cdll
@@ -28,7 +19,7 @@ def encoding():
     return "utf-8"
 
 
-def call(cmd):
+def call(cmd: str) -> str:
     """Calls a CLI command and returns the stdout as string."""
     logger.debug("AsciiDocReader: Running: %s", cmd)
     stdoutdata, stderrdata = subprocess.Popen(
@@ -39,12 +30,13 @@ def call(cmd):
     return stdoutdata.decode(encoding())
 
 
-def default():
-    """Attempt to find the default AsciiDoc utility."""
+def default() -> str:
+    """Return the name of the found asciidoc utility, if any."""
     for cmd in ALLOWED_CMDS:
         if len(call(cmd + " --help")):
             logger.debug("AsciiDocReader: Using cmd: %s", cmd)
             return cmd
+    return ""
 
 
 ALLOWED_CMDS = ["asciidoc", "asciidoctor"]
@@ -65,12 +57,17 @@ class AsciiDocReader(BaseReader):
         content = ""
         if cmd:
             logger.debug("AsciiDocReader: Reading: %s", source_path)
-            optlist = self.settings.get("ASCIIDOC_OPTIONS", []) + self.default_options
+            optlist = (
+                self.settings.get("ASCIIDOC_OPTIONS", [])
+                + self.default_options
+            )
             options = " ".join(optlist)
             # Beware! # Don't use tempfile.NamedTemporaryFile under Windows: https://bugs.python.org/issue14243
             # Also, use mkstemp correctly (Linux and Windows): https://www.logilab.org/blogentry/17873
             fd, temp_name = tempfile.mkstemp()
-            content = call('%s %s -o %s "%s"' % (cmd, options, temp_name, source_path))
+            content = call(
+                '%s %s -o %s "%s"' % (cmd, options, temp_name, source_path)
+            )
             with open(temp_name, encoding="utf-8") as f:
                 content = f.read()
             os.close(fd)
@@ -104,7 +101,9 @@ class AsciiDocReader(BaseReader):
                     elif line.count("=") == len(prev.strip()):
                         title = prev.strip()
                     if title:
-                        metadata["title"] = self.process_metadata("title", title)
+                        metadata["title"] = self.process_metadata(
+                            "title", title
+                        )
 
                 # Parse for other metadata.
                 regexp = re.compile(r"^:\w+:")
@@ -119,9 +118,10 @@ class AsciiDocReader(BaseReader):
 
 
 def add_reader(readers):
+    """Register the AsciiDocReader class for asciidoc file extensions."""
     for ext in AsciiDocReader.file_extensions:
         readers.reader_classes[ext] = AsciiDocReader
 
 
-def register():
+def register() -> None:
     signals.readers_init.connect(add_reader)

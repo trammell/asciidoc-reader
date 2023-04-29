@@ -1,17 +1,25 @@
+"""Pelican plugin to support asciidoc page entries."""
+
+
+import functools
 import logging
 import os
 import re
 import subprocess
 import tempfile
+from typing import List
 
-from pelican import signals
+# from pelican import signals
+import pelican
 from pelican.readers import BaseReader
 
 logger = logging.getLogger(__name__)
 
+ASCIIDOC_CANDIDATES = ["asciidoc", "asciidoctor", "asciidoc3"]
+
 
 def encoding() -> str:
-    """Return encoding used to decode shell output in call function"""
+    """Return encoding used to decode shell output in call function."""
     if os.name == "nt":
         from ctypes import cdll
 
@@ -19,39 +27,40 @@ def encoding() -> str:
     return "utf-8"
 
 
-def call(cmd: str) -> str:
-    """Calls a CLI command and returns the stdout as string."""
-    logger.debug("AsciiDocReader: Running: %s", cmd)
-    stdoutdata, stderrdata = subprocess.Popen(
-        cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True
-    ).communicate()
-    if stderrdata:
-        logger.warning("AsciiDocReader: strderr: %s", stderrdata)
-    return stdoutdata.decode(encoding())
+def call(command: List[str]) -> str:
+    """Call a CLI command and return the stdout as string."""
+    logger.debug("AsciiDocReader: Running: %s", command)
+    output = subprocess.run(command, capture_output=True)
+
+    if output.stderr:
+        logger.warning("AsciiDocReader: %s", output.stderr)
+    return output.stdout
 
 
-def default() -> str:
+@functools.cache
+def asciidoc_command() -> str:
     """Return the name of the found asciidoc utility, if any."""
-    for cmd in ALLOWED_CMDS:
+    for cmd in ASCIIDOC_CANDIDATES:
         if len(call(cmd + " --help")):
-            logger.debug("AsciiDocReader: Using cmd: %s", cmd)
+            logger.debug("AsciiDocReader: Using command: '%s'", cmd)
             return cmd
     return ""
 
 
-ALLOWED_CMDS = ["asciidoc", "asciidoctor"]
-
-ENABLED = None != default()
+@functools.cache
+def found_command() -> bool:
+    """Return True if the asciidoc executable is found, False otherwise."""
+    return len(asciidoc_command()) > 0
 
 
 class AsciiDocReader(BaseReader):
-    """Reader for AsciiDoc files."""
+    """Pelican Reader class for AsciiDoc files."""
 
-    enabled = ENABLED
+    enabled = found_command()
     file_extensions = ["asc", "adoc", "asciidoc"]
     default_options = ["--no-header-footer"]
 
-    def read(self, source_path):
+    def read(self, source_path: str):
         """Parse content and metadata of AsciiDoc files."""
         cmd = self._get_cmd()
         content = ""
@@ -62,8 +71,10 @@ class AsciiDocReader(BaseReader):
                 + self.default_options
             )
             options = " ".join(optlist)
-            # Beware! # Don't use tempfile.NamedTemporaryFile under Windows: https://bugs.python.org/issue14243
-            # Also, use mkstemp correctly (Linux and Windows): https://www.logilab.org/blogentry/17873
+            # Beware! # Don't use tempfile.NamedTemporaryFile under Windows:
+            # https://bugs.python.org/issue14243
+            # Also, use mkstemp correctly (Linux and Windows):
+            # https://www.logilab.org/blogentry/17873
             fd, temp_name = tempfile.mkstemp()
             content = call(
                 '%s %s -o %s "%s"' % (cmd, options, temp_name, source_path)
@@ -80,15 +91,16 @@ class AsciiDocReader(BaseReader):
         return content, metadata
 
     def _get_cmd(self):
-        """Returns the AsciiDoc utility command to use for rendering or None if
-        one cannot be found."""
-        if self.settings.get("ASCIIDOC_CMD") in ALLOWED_CMDS:
+        """Return the AsciiDoc command to use for rendering."""
+        if "ASCIIDOC_CMD" in self.settings:
             return self.settings.get("ASCIIDOC_CMD")
-        return default()
+        elif found_command():
+            return asciidoc_command()
+        else:
+            return "echo"
 
-    def _read_metadata(self, source_path):
-        """Parses the AsciiDoc file at the given `source_path` and returns found
-        metadata."""
+    def _read_metadata(self, source_path: str) -> dict[str]:
+        """Parse the AsciiDoc file and return found metadata."""
         metadata = {}
         with open(source_path, encoding="utf-8") as fi:
             prev = ""
@@ -117,11 +129,12 @@ class AsciiDocReader(BaseReader):
         return metadata
 
 
-def add_reader(readers):
-    """Register the AsciiDocReader class for asciidoc file extensions."""
+def add_reader(readers) -> None:
+    """Set AsciiDocReader to handle files with asciidoc file extensions."""
     for ext in AsciiDocReader.file_extensions:
         readers.reader_classes[ext] = AsciiDocReader
 
 
 def register() -> None:
-    signals.readers_init.connect(add_reader)
+    """Register function add_reader() to run at init."""
+    pelican.signals.readers_init.connect(add_reader)

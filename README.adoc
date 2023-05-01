@@ -6,11 +6,11 @@ posts. File extension should be `.asc`, `.adoc`, or `.asciidoc`.
 == Dependency
 
 There are two command line utilities commonly used to render AsciiDoc:
-``asciidoc`` and ``asciidoctor``. One of the two will need to be installed and
-on the PATH.
+`asciidoc` and `asciidoctor`. One of the two will need to be installed and on
+the PATH.
 
-**Note**: The ``asciidoctor`` utility is recommended since the original
-``asciidoc`` is no longer maintained.
+**Note**: The `asciidoctor` utility is recommended since the original
+`asciidoc` is no longer maintained.
 
 == Settings
 
@@ -44,4 +44,10 @@ in the main pelican documentation:
 
 and so on...
 ----
+
+== Acknowledgements
+
+Thanks to whoever wrote the original asciidoc reader code in
+https://github.com/getpelican/pelican-plugins/[]; a lot of it lives on in this
+package.
 

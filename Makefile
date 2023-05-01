@@ -9,4 +9,4 @@ lint:
 	poetry run flake8
 
 test:
-	poetry run pytest -vv
+	poetry run pytest -vv --log-level=DEBUG

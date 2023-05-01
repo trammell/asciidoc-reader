@@ -6,7 +6,6 @@ import logging
 import os
 import re
 import subprocess
-import tempfile
 from typing import List
 
 # from pelican import signals
@@ -15,7 +14,7 @@ from pelican.readers import BaseReader
 
 logger = logging.getLogger(__name__)
 
-ASCIIDOC_CANDIDATES = ["asciidoc", "asciidoctor", "asciidoc3"]
+ASCIIDOC_CANDIDATES = ["asciidoc", "asciidoctor"]
 
 
 def encoding() -> str:
@@ -31,17 +30,16 @@ def call(command: List[str]) -> str:
     """Call a CLI command and return the stdout as string."""
     logger.debug("AsciiDocReader: Running: %s", command)
     output = subprocess.run(command, capture_output=True)
-
     if output.stderr:
         logger.warning("AsciiDocReader: %s", output.stderr)
-    return output.stdout
+    return output.stdout.decode(encoding())
 
 
 @functools.cache
 def asciidoc_command() -> str:
     """Return the name of the found asciidoc utility, if any."""
     for cmd in ASCIIDOC_CANDIDATES:
-        if len(call(cmd + " --help")):
+        if len(call([cmd, "--help"])):
             logger.debug("AsciiDocReader: Using command: '%s'", cmd)
             return cmd
     return ""
@@ -58,39 +56,8 @@ class AsciiDocReader(BaseReader):
 
     enabled = found_command()
     file_extensions = ["asc", "adoc", "asciidoc"]
-    default_options = ["--no-header-footer"]
 
-    def read(self, source_path: str):
-        """Parse content and metadata of AsciiDoc files."""
-        cmd = self._get_cmd()
-        content = ""
-        if cmd:
-            logger.debug("AsciiDocReader: Reading: %s", source_path)
-            optlist = (
-                self.settings.get("ASCIIDOC_OPTIONS", [])
-                + self.default_options
-            )
-            options = " ".join(optlist)
-            # Beware! # Don't use tempfile.NamedTemporaryFile under Windows:
-            # https://bugs.python.org/issue14243
-            # Also, use mkstemp correctly (Linux and Windows):
-            # https://www.logilab.org/blogentry/17873
-            fd, temp_name = tempfile.mkstemp()
-            content = call(
-                '%s %s -o %s "%s"' % (cmd, options, temp_name, source_path)
-            )
-            with open(temp_name, encoding="utf-8") as f:
-                content = f.read()
-            os.close(fd)
-            os.unlink(temp_name)
-        metadata = self._read_metadata(source_path)
-        logger.debug(
-            "AsciiDocReader: Got content (showing first 50 chars): %s",
-            (content[:50] + "...") if len(content) > 50 else content,
-        )
-        return content, metadata
-
-    def _get_cmd(self):
+    def asciidoc_cmd(self):
         """Return the AsciiDoc command to use for rendering."""
         if "ASCIIDOC_CMD" in self.settings:
             return self.settings.get("ASCIIDOC_CMD")
@@ -99,8 +66,21 @@ class AsciiDocReader(BaseReader):
         else:
             return "echo"
 
+    def read(self, source_path: str):
+        """Parse content and metadata of AsciiDoc files."""
+        logger.debug("AsciiDocReader: Reading: %s", source_path)
+        adcmd = [self.asciidoc_cmd()]
+        adcmd += ["--out-file", "-", "--no-header-footer"]
+        adcmd += self.settings.get("ASCIIDOC_OPTIONS", [])
+        adcmd += [source_path]
+        logger.debug(f"AsciiDocReader: constructed command: {adcmd}")
+        content = call(adcmd)
+        logger.debug(f"AsciiDocReader: Got content: {content:.50}")
+        metadata = self._read_metadata(source_path)
+        return content, metadata
+
     def _read_metadata(self, source_path: str) -> dict[str]:
-        """Parse the AsciiDoc file and return found metadata."""
+        """Extrct the AsciiDoc metadata from the source file."""
         metadata = {}
         with open(source_path, encoding="utf-8") as fi:
             prev = ""

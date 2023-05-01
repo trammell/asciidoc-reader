@@ -1,12 +1,18 @@
 
 .PHONY: test
 
+install:
+	poetry install
+
+format:
+	poetry run black **/*.py
+	poetry run isort **/*.py
+
 lint:
-	poetry run isort asciidoc_reader.py
-	poetry run black asciidoc_reader.py
-	poetry run bandit -q --severity-level medium asciidoc_reader.py
-	poetry run pydocstyle asciidoc_reader.py
-	poetry run flake8
+	poetry run bandit -q --severity-level medium **/*.py
+	poetry run pydocstyle **/*.py
+	poetry run flake8 --per-file-ignores="__init__.py:F401" .
+	poetry run mypy src/
 
 test:
-	poetry run pytest -vv --log-level=DEBUG
+	poetry run pytest -rxXs --log-level=DEBUG

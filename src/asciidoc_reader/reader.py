@@ -6,7 +6,7 @@ import logging
 import os
 import re
 import subprocess
-from typing import List
+from typing import Dict, List, Any
 
 # from pelican import signals
 import pelican
@@ -79,9 +79,9 @@ class AsciiDocReader(BaseReader):
         metadata = self._read_metadata(source_path)
         return content, metadata
 
-    def _read_metadata(self, source_path: str) -> dict[str]:
+    def _read_metadata(self, source_path: str) -> Dict[str, Any]:
         """Extrct the AsciiDoc metadata from the source file."""
-        metadata = {}
+        metadata: Dict[str, Any] = {}
         with open(source_path, encoding="utf-8") as fi:
             prev = ""
             for line in fi.readlines():
